@@ -1,12 +1,7 @@
-# Base image 
-FROM openjdk
-
-# setting artifact path
-ARG artifact=target/demo-java-app.jar
+FROM openjdk:17-jdk-slim
 
 WORKDIR /opt/app
 
-COPY ${artifact} app.jar
+COPY target/demo-java-app.jar app.jar
 
-# Entrypoint for running app
-ENTRYPOINT ["java","-jar","app.jar"]
+ENTRYPOINT ["java", "-jar", "app.jar"]
