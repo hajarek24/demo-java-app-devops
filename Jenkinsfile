@@ -1,19 +1,19 @@
 pipeline {
   agent any
-  parameters {
-    string(name: 'build_version', defaultValue: 'V1.0', description: 'Build version to use for Docker image')
-  }
   stages {
-    stage('Checkout') {
+    stage('Build') {
       steps {
-        git branch: 'main', url: 'https://github.com/hajarek24/demo-java-app-devops.git'
+        dir('demo-java-app') { // <-- add this line
+          sh 'mvn clean package'
+        }
       }
     }
-    stage('Build and Test') {
+    stage('Test') {
       steps {
-        sh 'mvn clean package'
+        dir('demo-java-app') { // <-- add this line
+          sh 'mvn test'
+        }
       }
     }
-    // Add other stages as needed
   }
 }
