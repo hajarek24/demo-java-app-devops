@@ -3,12 +3,16 @@ pipeline {
   stages {
     stage('Build') {
       steps {
-        sh 'mvn clean package'
+        dir('demo-java-app') { // <-- add this line
+          sh 'mvn clean package'
+        }
       }
     }
     stage('Test') {
       steps {
-        sh 'mvn test'
+        dir('demo-java-app') { // <-- add this line
+          sh 'mvn test'
+        }
       }
     }
   }
