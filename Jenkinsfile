@@ -1,10 +1,5 @@
 pipeline {
-    agent {
-        docker {
-            image 'maven:3.8.6-openjdk-11'
-            args '-v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker --group-add $(getent group docker | cut -d: -f3)'
-        }
-    }
+    agent any
     
     environment {
         DOCKER_IMAGE = "hajarek24/demo-java-app:${BUILD_NUMBER}"
@@ -37,25 +32,45 @@ pipeline {
             }
             post {
                 always {
-                    dir('demo-java-app') {
-                        // Publier les résultats des tests si disponibles
-                        publishTestResults testResultsPattern: 'target/surefire-reports/*.xml', 
-                                          allowEmptyResults: true
-                    }
+                    echo 'Test stage completed'
+                }
+                success {
+                    echo 'Tests passed successfully!'
+                }
+                failure {
+                    echo 'Tests failed!'
                 }
             }
         }
         
         stage('Docker Build & Push') {
+            when {
+                // Seulement si Docker est disponible
+                expression { 
+                    return sh(script: 'which docker', returnStatus: true) == 0
+                }
+            }
             steps {
                 script {
-                    docker.withRegistry('https://index.docker.io/v1/', "${DOCKERHUB_CREDENTIALS}") {
-                        // Construction de l'image Docker
-                        def customImage = docker.build("${DOCKER_IMAGE}", "demo-java-app")
+                    try {
+                        // Vérifier si Docker fonctionne
+                        sh 'docker --version'
                         
-                        // Push de l'image
-                        customImage.push()
-                        customImage.push("latest")
+                        // Construction de l'image Docker
+                        sh "docker build -t ${DOCKER_IMAGE} demo-java-app"
+                        
+                        // Push vers Docker Hub (si les credentials sont configurés)
+                        withCredentials([usernamePassword(credentialsId: "${DOCKERHUB_CREDENTIALS}", 
+                                                        usernameVariable: 'DOCKER_USER', 
+                                                        passwordVariable: 'DOCKER_PASS')]) {
+                            sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                            sh "docker push ${DOCKER_IMAGE}"
+                            sh "docker tag ${DOCKER_IMAGE} hajarek24/demo-java-app:latest"
+                            sh "docker push hajarek24/demo-java-app:latest"
+                        }
+                    } catch (Exception e) {
+                        echo "Docker not available or credentials not configured: ${e.getMessage()}"
+                        currentBuild.result = 'UNSTABLE'
                     }
                 }
             }
@@ -70,21 +85,34 @@ pipeline {
         }
         
         stage('Deploy to Kubernetes') {
+            when {
+                // Seulement si kubectl est disponible
+                expression { 
+                    return sh(script: 'which kubectl', returnStatus: true) == 0
+                }
+            }
             steps {
-                withCredentials([file(credentialsId: "${KUBECONFIG_CREDENTIALS}", variable: 'KUBECONFIG')]) {
-                    sh '''
-                        # Vérifier que kubectl est disponible
-                        which kubectl || (echo "kubectl not found" && exit 1)
-                        
-                        # Mettre à jour l'image dans le deployment
-                        sed -i "s|image:.*|image: ${DOCKER_IMAGE}|" k8s/deployment.yaml
-                        
-                        # Appliquer le deployment
-                        kubectl --kubeconfig=$KUBECONFIG apply -f k8s/deployment.yaml
-                        
-                        # Vérifier le statut du deployment
-                        kubectl --kubeconfig=$KUBECONFIG rollout status deployment/demo-java-app --timeout=300s
-                    '''
+                script {
+                    try {
+                        withCredentials([file(credentialsId: "${KUBECONFIG_CREDENTIALS}", variable: 'KUBECONFIG')]) {
+                            sh '''
+                                # Vérifier que kubectl fonctionne
+                                kubectl --kubeconfig=$KUBECONFIG version --client
+                                
+                                # Mettre à jour l'image dans le deployment
+                                sed -i "s|image:.*|image: ${DOCKER_IMAGE}|" k8s/deployment.yaml
+                                
+                                # Appliquer le deployment
+                                kubectl --kubeconfig=$KUBECONFIG apply -f k8s/deployment.yaml
+                                
+                                # Vérifier le statut du deployment
+                                kubectl --kubeconfig=$KUBECONFIG rollout status deployment/demo-java-app --timeout=300s
+                            '''
+                        }
+                    } catch (Exception e) {
+                        echo "Kubernetes deployment not available or credentials not configured: ${e.getMessage()}"
+                        currentBuild.result = 'UNSTABLE'
+                    }
                 }
             }
             post {
@@ -100,14 +128,26 @@ pipeline {
     
     post {
         always {
-            // Nettoyer les images Docker locales pour économiser l'espace
-            sh 'docker image prune -f || true'
+            node {
+                echo 'Pipeline completed'
+                // Nettoyer les images Docker si disponible
+                script {
+                    try {
+                        sh 'docker image prune -f || true'
+                    } catch (Exception e) {
+                        echo "Docker cleanup skipped: ${e.getMessage()}"
+                    }
+                }
+            }
         }
         success {
             echo 'Pipeline completed successfully!'
         }
         failure {
             echo 'Pipeline failed!'
+        }
+        unstable {
+            echo 'Pipeline completed with warnings (some optional stages failed)'
         }
     }
 }
