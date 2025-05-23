@@ -27,6 +27,7 @@ spec:
   selector:
     app: demo-java-app
   ports:
-    - port: 8081
+    - name: http
+      port: 8081
       targetPort: 8081
       nodePort: 30081
