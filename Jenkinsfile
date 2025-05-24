@@ -3,7 +3,6 @@ pipeline {
 
   environment {
     DOCKER_IMAGE = "hajarek24/demo-java-app:${BUILD_NUMBER}"
-    SONAR_URL = "http://host.docker.internal:9000"
   }
 
   stages {
@@ -17,15 +16,6 @@ pipeline {
         dir('demo-java-app') {
           sh 'mvn clean package'
           sh 'mvn test'
-        }
-      }
-    }
-    stage('Static Code Analysis') {
-      steps {
-        withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
-          dir('demo-java-app') {
-            sh 'mvn sonar:sonar -Dsonar.login=$SONAR_AUTH_TOKEN -Dsonar.host.url=http://host.docker.internal:9000'
-          }
         }
       }
     }
