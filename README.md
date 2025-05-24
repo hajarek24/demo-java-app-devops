@@ -1,5 +1,7 @@
 # demo-java-app-devops
 
+**demo-java-app** est une application web développée en Java avec Spring Boot. Elle affiche une page d’accueil simple avec un titre et un message, et expose des endpoints pour la supervision. L’application utilise Thymeleaf pour le rendu HTML et peut fournir des métriques pour le monitoring.
+
 Pipeline DevOps complète pour une application Java Spring Boot, incluant :
 - CI/CD avec Jenkins
 - Déploiement Kubernetes avec Helm
